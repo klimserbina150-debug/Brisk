@@ -1,0 +1,226 @@
+-- Brisk Survival | Sigma Silent Aim v1.2 (FIXED)
+-- by @sigmatop1jj | t.me/megaswitifox
+
+print("[Sigma] Загрузка...")
+
+-- 🔥 Уведомление через StarterGui (работает ВСЕГДА)
+local function Notify(title, text, duration)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration or 5,
+        })
+    end)
+end
+
+local hasHook = pcall(function() return hookmetamethod end)
+local hasNCC = pcall(function() return newcclosure end)
+print("[Sigma] hookmetamethod:", hasHook, "| newcclosure:", hasNCC)
+
+local repo = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/"
+local ok, Library = pcall(function() return loadstring(game:HttpGet(repo .. "Library.lua"))() end)
+if not ok or not Library then
+    warn("[Sigma] ОШИБКА: Linoria не загрузилась:", Library)
+    Notify("Sigma", "Ошибка загрузки библиотеки", 5)
+    return
+end
+print("[Sigma] Linoria загружена")
+
+local okWin, Window = pcall(function()
+    return Library:CreateWindow({
+        Title = "Brisk | Sigma",
+        Footer = "by @sigmatop1jj | t.me/megaswitifox",
+        Center = true, AutoShow = true, Resizable = true,
+    })
+end)
+if not okWin or not Window then
+    warn("[Sigma] ОШИБКА: Окно не создалось:", Window)
+    Notify("Sigma", "Ошибка создания окна", 5)
+    return
+end
+print("[Sigma] Окно создано")
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LP = Players.LocalPlayer
+local Cam = workspace.CurrentCamera
+
+local Vars = {
+    SilentAimEnabled = false,
+    SilentAimFov = 300,
+    SilentAimMaxDist = 1500,
+    SilentAimVisibleCheck = false,
+    SilentAimTargetPart = "Head",
+    ESPEnabled = false,
+    ESPBox = false,
+    ESPName = false,
+    ESPHealth = false,
+    ESPMaxDist = 1500,
+}
+
+local Combat = Window:AddTab("Combat")
+local Visuals = Window:AddTab("Visuals")
+
+local SA = Combat:AddLeftGroupbox("Silent Aim (GunFire)")
+SA:AddToggle("SilentAimEnabled", { Text = "Enable Silent Aim", Default = false, Callback = function(v) Vars.SilentAimEnabled = v end })
+SA:AddDropdown("SilentAimTargetPart", { Text = "Target Part", Values = {"Head", "Torso", "HumanoidRootPart"}, Default = "Head", Callback = function(v) Vars.SilentAimTargetPart = v end })
+SA:AddSlider("SilentAimFov", { Text = "FOV", Default = 300, Min = 10, Max = 1000, Rounding = 0, Callback = function(v) Vars.SilentAimFov = v end })
+SA:AddSlider("SilentAimMaxDist", { Text = "Max Distance", Default = 1500, Min = 50, Max = 5000, Rounding = 0, Callback = function(v) Vars.SilentAimMaxDist = v end })
+SA:AddToggle("SilentAimVisibleCheck", { Text = "Visible Check (WallBang OFF)", Default = false, Callback = function(v) Vars.SilentAimVisibleCheck = v end })
+SA:AddLabel("Visible Check ВЫКЛ = стреляет сквозь стены")
+
+local VG = Visuals:AddLeftGroupbox("ESP")
+VG:AddToggle("ESPEnabled", { Text = "Enable ESP", Default = false, Callback = function(v) Vars.ESPEnabled = v end })
+VG:AddToggle("ESPBox", { Text = "Box", Default = false, Callback = function(v) Vars.ESPBox = v end })
+VG:AddToggle("ESPName", { Text = "Name", Default = false, Callback = function(v) Vars.ESPName = v end })
+VG:AddToggle("ESPHealth", { Text = "Health Bar", Default = false, Callback = function(v) Vars.ESPHealth = v end })
+VG:AddSlider("ESPMaxDist", { Text = "Max Distance", Default = 1500, Min = 50, Max = 5000, Rounding = 0, Callback = function(v) Vars.ESPMaxDist = v end })
+
+print("[Sigma] UI создан")
+
+-- ESP
+local ESP_Data = {}
+local function MakeESP(p)
+    if p == LP then return end
+    if ESP_Data[p] then
+        for _, d in pairs(ESP_Data[p]) do pcall(function() d:Remove() end) end
+    end
+    local okD, data = pcall(function()
+        return {
+            Box = Drawing.new("Square"),
+            Name = Drawing.new("Text"),
+            Health = Drawing.new("Square"),
+        }
+    end)
+    if not okD or not data then return end
+    data.Box.Visible = false; data.Box.Thickness = 1; data.Box.Color = Color3.fromRGB(255,0,0); data.Box.Filled = false
+    data.Name.Visible = false; data.Name.Size = 14; data.Name.Center = true; data.Name.Outline = true; data.Name.Color = Color3.new(1,1,1)
+    data.Health.Visible = false; data.Health.Thickness = 1; data.Health.Filled = true
+    ESP_Data[p] = data
+end
+
+for _, p in ipairs(Players:GetPlayers()) do pcall(MakeESP, p) end
+Players.PlayerAdded:Connect(function(p) pcall(MakeESP, p) end)
+Players.PlayerRemoving:Connect(function(p)
+    if ESP_Data[p] then
+        for _, d in pairs(ESP_Data[p]) do pcall(function() d:Remove() end) end
+        ESP_Data[p] = nil
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    pcall(function()
+        for p, data in pairs(ESP_Data) do
+            if Vars.ESPEnabled and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Head") then
+                local hrp = p.Character.HumanoidRootPart
+                local head = p.Character.Head
+                local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                local dist = (Cam.CFrame.Position - hrp.Position).Magnitude
+                if dist <= Vars.ESPMaxDist then
+                    local pos, onScreen = Cam:WorldToViewportPoint(hrp.Position)
+                    local headPos = Cam:WorldToViewportPoint(head.Position + Vector3.new(0,0.5,0))
+                    if onScreen then
+                        local height = math.abs(pos.Y - headPos.Y) * 2.2
+                        local width = height * 0.6
+                        local boxPos = Vector2.new(pos.X - width/2, pos.Y - height/2)
+                        data.Box.Visible = Vars.ESPBox
+                        data.Box.Size = Vector2.new(width, height)
+                        data.Box.Position = boxPos
+                        data.Name.Visible = Vars.ESPName
+                        data.Name.Text = p.Name
+                        data.Name.Position = Vector2.new(pos.X, boxPos.Y - 20)
+                        if Vars.ESPHealth and hum then
+                            data.Health.Visible = true
+                            local hp = hum.Health / hum.MaxHealth
+                            data.Health.Color = Color3.fromRGB(255*(1-hp), 255*hp, 0)
+                            data.Health.Size = Vector2.new(3, height*hp)
+                            data.Health.Position = Vector2.new(boxPos.X - 6, boxPos.Y + height*(1-hp))
+                        else
+                            data.Health.Visible = false
+                        end
+                    else
+                        data.Box.Visible = false; data.Name.Visible = false; data.Health.Visible = false
+                    end
+                else
+                    data.Box.Visible = false; data.Name.Visible = false; data.Health.Visible = false
+                end
+            else
+                data.Box.Visible = false; data.Name.Visible = false; data.Health.Visible = false
+            end
+        end
+    end)
+end)
+
+print("[Sigma] ESP логика запущена")
+
+-- Silent Aim
+local function IsVisible(targetChar)
+    local myChar = LP.Character
+    if not myChar then return false end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {myChar, targetChar, Cam}
+    local targetPart = targetChar:FindFirstChild(Vars.SilentAimTargetPart) or targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetPart then return false end
+    local res = workspace:Raycast(Cam.CFrame.Position, (targetPart.Position - Cam.CFrame.Position), params)
+    return res == nil
+end
+
+local function GetTarget()
+    local closest, shortest = nil, Vars.SilentAimFov
+    local center = Vector2.new(Cam.ViewportSize.X/2, Cam.ViewportSize.Y/2)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local targetPart = p.Character:FindFirstChild(Vars.SilentAimTargetPart) or p.Character:FindFirstChild("HumanoidRootPart")
+                if targetPart then
+                    local dist = (Cam.CFrame.Position - targetPart.Position).Magnitude
+                    if dist <= Vars.SilentAimMaxDist then
+                        if Vars.SilentAimVisibleCheck and not IsVisible(p.Character) then
+                            -- пропускаем
+                        else
+                            local pos, onScreen = Cam:WorldToViewportPoint(targetPart.Position)
+                            if onScreen then
+                                local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                                if d < shortest then shortest = d; closest = targetPart end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- 🔥 HOOK
+if hasHook and hasNCC then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if method == "FireServer" and self.Name == "GunFire" and Vars.SilentAimEnabled then
+            local targetPart = GetTarget()
+            if targetPart then
+                local args = {...}
+                local origin = args[1]
+                local targetPos = targetPart.Position
+                args[2] = targetPos
+                args[3] = (targetPos - origin).Unit
+                return oldNamecall(self, unpack(args))
+            end
+        end
+        return oldNamecall(self, ...)
+    end))
+    print("[Sigma] Silent Aim хук установлен ✅")
+else
+    warn("[Sigma] ⚠️ hookmetamethod или newcclosure НЕ работают на этом экзекуторе")
+end
+
+task.spawn(function()
+    task.wait(1)
+    Notify("Sigma Silent Aim", "v1.2 загружен!", 5)
+end)
+
+print("=== Sigma Silent Aim v1.2 READY ===")
